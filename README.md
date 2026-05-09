@@ -1,14 +1,14 @@
 # Google API Key & Firebase Checker
 
-Bash scripts for authorized security testing — validate the scope of a Google API key and check Firebase Realtime Database instances for unauthenticated access. Useful during mobile or web application pentests.
+Bash scripts for authorized security testing — validate the scope of a Google API key, check Firebase Realtime Database instances for unauthenticated access, and probe Google Cloud / Firebase Storage buckets for misconfigurations. Useful during mobile or web application pentests.
 
 ---
 
 ## Setup
 
-Make both scripts executable before running:
+Make all scripts executable before running:
 ```bash
-chmod +x check_apikey.sh check_firebase.sh
+chmod +x check_apikey.sh check_firebase.sh check_storage_bucket.sh
 ```
 
 ---
@@ -127,10 +127,76 @@ FIREBASE_URL=https://project-default-rtdb.firebaseio.com ./check_firebase.sh
 
 ---
 
+## check_storage_bucket.sh
+
+Tests a Google Cloud Storage or Firebase Storage bucket for unauthenticated read, write, list access, and common misconfigurations.
+
+### Usage
+
+**Interactive** — prompts for the bucket name:
+```bash
+./check_storage_bucket.sh
+```
+
+**Argument** — pass the bucket name directly:
+```bash
+./check_storage_bucket.sh <BUCKET_NAME>
+```
+
+**Environment variable:**
+```bash
+GCS_BUCKET=<BUCKET_NAME> ./check_storage_bucket.sh
+```
+
+The `gs://` prefix is stripped automatically if included.
+
+### What It Tests
+
+**List / Read Access**
+- GCS JSON API object listing
+- GCS direct URL listing
+- Firebase Storage API listing
+
+**Bucket Metadata / IAM**
+- Bucket metadata readability (location, configuration)
+- IAM policy exposure (`allUsers` or `allAuthenticatedUsers`)
+
+**Common Sensitive Files** (unauthenticated fetch)
+- `config.json`, `credentials.json`, `secrets.json`, `firebase.json`, `google-services.json`, `.env`, `database.json`, `users.json`, `backup.zip`, `backup.sql`, `dump.sql`, `private.pem`, `private_key.json`, `serviceAccount.json`, `service-account.json`
+
+**Write Access**
+- Attempts an unauthenticated upload via the GCS upload API and deletes the test file immediately if the write succeeds
+
+**gsutil** (if installed)
+- Runs `gsutil ls` as an additional unauthenticated list check
+
+### Output
+
+| Result | Meaning |
+|---|---|
+| `LIST OPEN` | Bucket contents listable without authentication |
+| `WRITE OPEN` | Unauthenticated upload succeeded |
+| `ACCESSIBLE (HTTP 200)` | Sensitive file is publicly downloadable |
+| `METADATA READABLE` | Bucket metadata returned without authentication |
+| `IAM EXPOSED` | IAM policy grants access to `allUsers` or `allAuthenticatedUsers` |
+| `DENIED` / `RESTRICTED` | Endpoint is secured |
+| `NOT FOUND (404)` | Bucket or object does not exist |
+| `UNKNOWN` | Unexpected HTTP response; code shown |
+
+### Severity
+
+- **CRITICAL** — unauthenticated write succeeded, or sensitive credentials / keys accessible
+- **HIGH** — data readable without authentication (open listing or sensitive files)
+- **MEDIUM** — misconfiguration found (e.g. metadata readable, IAM exposed)
+- **Informational** — bucket appears properly secured
+
+---
+
 ## Requirements
 
 - `bash`
 - `curl`
+- `gsutil` *(optional — for the gsutil check in `check_storage_bucket.sh`)*
 
 ## Authorization
 
