@@ -1,13 +1,23 @@
-# Google API Key Scope Checker
+# Google API Key & Firebase Checker
 
-A bash script for authorized security testing that validates the scope and restrictions of a Google API key across multiple Google APIs — useful for identifying misconfigurations during mobile or web application pentests.
+Bash scripts for authorized security testing — validate the scope of a Google API key and check Firebase Realtime Database instances for unauthenticated access. Useful during mobile or web application pentests.
 
-## Usage
+---
 
-Make the script executable before running it:
+## Setup
+
+Make both scripts executable before running:
 ```bash
-chmod +x check_apikey.sh
+chmod +x check_apikey.sh check_firebase.sh
 ```
+
+---
+
+## check_apikey.sh
+
+Tests a Google API key against multiple Google APIs to identify misconfigurations and unrestricted access.
+
+### Usage
 
 **Interactive** — prompts for the key securely (hidden input):
 ```bash
@@ -16,7 +26,7 @@ chmod +x check_apikey.sh
 
 **Argument** — pass the key directly:
 ```bash
-./check_apikey.sh AIzaSy...
+./check_apikey.sh <keyValue>
 ```
 
 **Environment variable** — useful in scripts or CI:
@@ -24,9 +34,7 @@ chmod +x check_apikey.sh
 GOOGLE_API_KEY=<keyValue> ./check_apikey.sh
 ```
 
-## What It Tests
-
-The script probes the provided key against two categories of Google APIs:
+### What It Tests
 
 **Geo / Maps APIs**
 - Geocoding
@@ -44,9 +52,7 @@ The script probes the provided key against two categories of Google APIs:
 - Gmail
 - Cloud Storage
 
-## Output
-
-Each API is reported as one of:
+### Output
 
 | Result | Meaning |
 |---|---|
@@ -56,9 +62,7 @@ Each API is reported as one of:
 | `DENIED / INVALID` | Key rejected by Google |
 | `UNKNOWN` | Unexpected response; raw error shown |
 
-## Severity Summary
-
-After all checks, the script prints a findings summary with a severity rating:
+### Severity
 
 - **CRITICAL** — sensitive APIs accessible (Drive, Cloud, Firebase, Gmail, Admin)
 - **MEDIUM** — 3 or more APIs accessible
@@ -67,6 +71,62 @@ After all checks, the script prints a findings summary with a severity rating:
 
 > Even when no APIs are accessible, an exposed key (e.g. hardcoded in an APK) is still a finding. Recommend restricting by Android app signature in Google Cloud Console or moving calls server-side.
 
+---
+
+## check_firebase.sh
+
+Tests a Firebase Realtime Database URL for unauthenticated read and write access across common and sensitive endpoints, plus Firestore REST API exposure.
+
+### Usage
+
+**Interactive** — prompts for the database URL:
+```bash
+./check_firebase.sh
+```
+
+**Argument** — pass the URL directly:
+```bash
+./check_firebase.sh https://project-default-rtdb.firebaseio.com
+```
+
+**Environment variable:**
+```bash
+FIREBASE_URL=https://project-default-rtdb.firebaseio.com ./check_firebase.sh
+```
+
+### What It Tests
+
+**Root & Common Endpoints** (unauthenticated read)
+- Root, Users, Accounts, Messages, Chats, Tokens, Config, Settings, Admin, Data, API
+
+**Sensitive Endpoints** (unauthenticated read)
+- Private, Secrets, Keys, Passwords, Credentials, Payments, Transactions, Logs
+
+**Write Access Test**
+- Attempts an unauthenticated POST to `firebase_pentest_check.json` and cleans up any written data immediately after
+
+**Firestore REST API**
+- Derives the project ID from the database URL and probes the Firestore REST endpoint for open access
+
+### Output
+
+| Result | Meaning |
+|---|---|
+| `OPEN` | Endpoint readable without authentication; byte count shown |
+| `NULL` | Endpoint exists but contains no data |
+| `WRITE OPEN` | Unauthenticated write succeeded |
+| `PERMISSION DENIED` / `RESTRICTED` | Endpoint is secured |
+| `UNKNOWN` | Unexpected response; raw output shown |
+
+### Severity
+
+- **CRITICAL** — unauthenticated write access, or sensitive data (users, tokens, passwords, etc.) readable
+- **HIGH** — data readable without authentication
+- **MEDIUM** — endpoints exposed but return null data
+- **Informational** — database appears properly secured
+
+---
+
 ## Requirements
 
 - `bash`
@@ -74,4 +134,4 @@ After all checks, the script prints a findings summary with a severity rating:
 
 ## Authorization
 
-For authorized testing only. Run this tool only against API keys you own or have explicit written permission to test.
+For authorized testing only. Run these tools only against targets you own or have explicit written permission to test.
