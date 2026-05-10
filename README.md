@@ -1,6 +1,6 @@
 # Google API Key & Firebase Checker
 
-Bash scripts for authorized security testing — validate the scope of a Google API key, check Firebase Realtime Database instances for unauthenticated access, and probe Google Cloud / Firebase Storage buckets for misconfigurations. Useful during mobile or web application pentests.
+Bash scripts for authorized security testing — validate the scope of a Google API key, check Firebase Realtime Database instances for unauthenticated access, probe Google Cloud / Firebase Storage buckets for misconfigurations, and test Crash Reporting / Crashlytics API keys for exposed crash data. Useful during mobile or web application pentests.
 
 ---
 
@@ -8,7 +8,7 @@ Bash scripts for authorized security testing — validate the scope of a Google 
 
 Make all scripts executable before running:
 ```bash
-chmod +x check_apikey.sh check_firebase.sh check_storage_bucket.sh
+chmod +x check_apikey.sh check_firebase.sh check_storage_bucket.sh check_crashreporting.sh
 ```
 
 ---
@@ -189,6 +189,84 @@ The `gs://` prefix is stripped automatically if included.
 - **HIGH** — data readable without authentication (open listing or sensitive files)
 - **MEDIUM** — misconfiguration found (e.g. metadata readable, IAM exposed)
 - **Informational** — bucket appears properly secured
+
+---
+
+## check_crashreporting.sh
+
+Tests a Google API key for unauthorized access to Firebase Crashlytics crash reports, Cloud Error Reporting data, and related APIs. Validates whether an exposed key (e.g. hardcoded in an APK) can be used to read crash data, stack traces, or project internals.
+
+### Usage
+
+**Interactive** — prompts for the key (hidden input):
+```bash
+./check_crashreporting.sh
+```
+
+**Argument** — pass the key directly:
+```bash
+./check_crashreporting.sh <API_KEY>
+```
+
+**Environment variable:**
+```bash
+CRASH_API_KEY=AIza... ./check_crashreporting.sh
+```
+
+The key is validated against the expected `AIza...` format before testing begins.
+
+### What It Tests
+
+**Project Discovery**
+- Firebase Management API — attempts to extract the project ID and project number from the key
+
+**Firebase Crashlytics**
+- Android app list via Firebase Management API
+- Crashlytics project access
+- Cloud Error Reporting group stats (crash report summaries)
+- Cloud Error Reporting events (individual stack traces)
+- Error group listing
+
+**Related Firebase / Google APIs**
+- Firebase Management API
+- Cloud Logging (may contain crash-related log entries)
+- Cloud Monitoring
+- Firebase Remote Config
+- Firebase App Distribution
+- Firebase Dynamic Links
+- Cloud Error Reporting write access
+
+### Why Crash Report Access is Sensitive
+
+If any crash reporting endpoint is accessible, an attacker may retrieve:
+- Device model, OS, carrier, screen resolution
+- App version, build number, and internal configuration
+- Full stack traces (reveals internal code paths and logic)
+- Memory state at the time of crash
+- User account IDs if logged at crash time
+- Session tokens if present in app state
+- PII if developers log it carelessly
+- Internal API endpoints discoverable from stack traces
+
+### Output
+
+| Result | Meaning |
+|---|---|
+| `ACCESSIBLE` | API responded with data |
+| `ACCESSIBLE — SENSITIVE DATA EXPOSED` | API returned crash/project data |
+| `PROJECT INFO EXPOSED` | Project ID and number extracted from key |
+| `PERMISSION DENIED` / `RESTRICTED` | Endpoint is secured |
+| `KEY INVALID / REVOKED` | Key is not accepted by Google |
+| `API NOT ENABLED` | API exists but is not active for this project |
+| `NOT FOUND (404)` | Project ID required; not discovered automatically |
+| `UNKNOWN` | Unexpected HTTP response; code shown |
+
+### Severity
+
+- **HIGH** — crash/error data accessible; may contain PII, stack traces, or internal endpoints
+- **MEDIUM** — multiple APIs accessible without sensitive crash data
+- **LOW** — limited access
+- **Informational** — no APIs accessible, but key is still exposed in plaintext (recommend restricting by app signature in Google Cloud Console)
 
 ---
 
